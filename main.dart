@@ -41,7 +41,13 @@ class GlassyContainer extends StatelessWidget {
   final EdgeInsets padding;
   final double opacity;
 
-  const GlassyContainer({super.key, required this.child, this.borderRadius = 20, this.padding = const EdgeInsets.all(20), this.opacity = 0.1});
+  const GlassyContainer({
+    super.key, 
+    required this.child, 
+    this.borderRadius = 20, 
+    this.padding = const EdgeInsets.all(20), 
+    this.opacity = 0.1
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -108,17 +114,22 @@ class _AuthCheckState extends State<AuthCheck> {
     
     if (token != null && uid != null) {
       if (username == null || username!.isEmpty) {
-        // Check DB if username exists
         final res = await http.get(Uri.parse('${HiiApp.dbUrl}/users/$uid/username.json?auth=$token'));
         if (res.statusCode == 200 && res.body != 'null') {
           username = jsonDecode(res.body);
           await prefs.setString('auth_username', username!);
-          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
+          if (mounted) {
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
+          }
         } else {
-          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: token!, uid: uid!)));
+          if (mounted) {
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: token!, uid: uid!)));
+          }
         }
       } else {
-        if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
+        if (mounted) {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
+        }
       }
     } else {
       setState(() => isLoading = false);
@@ -127,7 +138,13 @@ class _AuthCheckState extends State<AuthCheck> {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) return const Scaffold(body: BackgroundGradient(child: Center(child: CircularProgressIndicator())));
+    if (isLoading) {
+      return const Scaffold(
+        body: BackgroundGradient(
+          child: Center(child: CircularProgressIndicator())
+        )
+      );
+    }
     return const AuthScreen();
   }
 }
@@ -152,7 +169,14 @@ class _AuthScreenState extends State<AuthScreen> {
         : 'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${HiiApp.apiKey}';
 
     try {
-      final res = await http.post(Uri.parse(url), body: jsonEncode({'email': emailController.text.trim(), 'password': passwordController.text.trim(), 'returnSecureToken': true}));
+      final res = await http.post(
+        Uri.parse(url), 
+        body: jsonEncode({
+          'email': emailController.text.trim(), 
+          'password': passwordController.text.trim(), 
+          'returnSecureToken': true
+        })
+      );
       final data = jsonDecode(res.body);
       
       if (data['error'] != null) {
@@ -161,7 +185,9 @@ class _AuthScreenState extends State<AuthScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', data['idToken']);
         await prefs.setString('auth_uid', data['localId']);
-        if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: data['idToken'], uid: data['localId'])));
+        if (mounted) {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: data['idToken'], uid: data['localId'])));
+        }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Internet Error!')));
@@ -182,12 +208,45 @@ class _AuthScreenState extends State<AuthScreen> {
                 children: [
                   const Text('hii', style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -2)),
                   const SizedBox(height: 30),
-                  TextField(controller: emailController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'Email', labelStyle: const TextStyle(color: Colors.white70), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)))),
+                  TextField(
+                    controller: emailController, 
+                    style: const TextStyle(color: Colors.white), 
+                    decoration: InputDecoration(
+                      labelText: 'Email', 
+                      labelStyle: const TextStyle(color: Colors.white70), 
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
+                    )
+                  ),
                   const SizedBox(height: 15),
-                  TextField(controller: passwordController, obscureText: true, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'Password', labelStyle: const TextStyle(color: Colors.white70), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)))),
+                  TextField(
+                    controller: passwordController, 
+                    obscureText: true, 
+                    style: const TextStyle(color: Colors.white), 
+                    decoration: InputDecoration(
+                      labelText: 'Password', 
+                      labelStyle: const TextStyle(color: Colors.white70), 
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
+                    )
+                  ),
                   const SizedBox(height: 25),
-                  isLoading ? const CircularProgressIndicator() : SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))), onPressed: _authenticate, child: Text(isLogin ? 'Login' : 'Sign Up', style: const TextStyle(color: Colors.white, fontSize: 18)))),
-                  TextButton(onPressed: () => setState(() => isLogin = !isLogin), child: Text(isLogin ? 'Create Account' : 'Back to Login', style: const TextStyle(color: Colors.white70)))
+                  isLoading 
+                    ? const CircularProgressIndicator() 
+                    : SizedBox(
+                        width: double.infinity, 
+                        height: 50, 
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF38BDF8), 
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))
+                          ), 
+                          onPressed: _authenticate, 
+                          child: Text(isLogin ? 'Login' : 'Sign Up', style: const TextStyle(color: Colors.white, fontSize: 18))
+                        )
+                      ),
+                  TextButton(
+                    onPressed: () => setState(() => isLogin = !isLogin), 
+                    child: Text(isLogin ? 'Create Account' : 'Back to Login', style: const TextStyle(color: Colors.white70))
+                  )
                 ],
               ),
             ),
@@ -218,7 +277,6 @@ class _UsernameScreenState extends State<UsernameScreen> {
     }
     setState(() => isLoading = true);
 
-    // Check if taken
     final checkRes = await http.get(Uri.parse('${HiiApp.dbUrl}/usernames/$un.json?auth=${widget.token}'));
     if (checkRes.body != 'null') {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username already taken! Try another.')));
@@ -226,14 +284,15 @@ class _UsernameScreenState extends State<UsernameScreen> {
       return;
     }
 
-    // Save username
     await http.put(Uri.parse('${HiiApp.dbUrl}/usernames/$un.json?auth=${widget.token}'), body: jsonEncode(widget.uid));
     await http.put(Uri.parse('${HiiApp.dbUrl}/users/${widget.uid}/username.json?auth=${widget.token}'), body: jsonEncode(un));
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_username', un);
 
-    if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: widget.token, uid: widget.uid, username: un)));
+    if (mounted) {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: widget.token, uid: widget.uid, username: un)));
+    }
   }
 
   @override
@@ -251,9 +310,29 @@ class _UsernameScreenState extends State<UsernameScreen> {
                   const SizedBox(height: 20),
                   const Text('Create Your Username', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 20),
-                  TextField(controller: usernameController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(prefixText: '@', prefixStyle: const TextStyle(color: Colors.white70, fontSize: 16), labelText: 'Unique Username', labelStyle: const TextStyle(color: Colors.white70), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)))),
+                  TextField(
+                    controller: usernameController, 
+                    style: const TextStyle(color: Colors.white), 
+                    decoration: InputDecoration(
+                      prefixText: '@', 
+                      prefixStyle: const TextStyle(color: Colors.white70, fontSize: 16), 
+                      labelText: 'Unique Username', 
+                      labelStyle: const TextStyle(color: Colors.white70), 
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
+                    )
+                  ),
                   const SizedBox(height: 20),
-                  isLoading ? const CircularProgressIndicator() : SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)), onPressed: _saveUsername, child: const Text('Save & Continue', style: TextStyle(color: Colors.white)))),
+                  isLoading 
+                    ? const CircularProgressIndicator() 
+                    : SizedBox(
+                        width: double.infinity, 
+                        height: 50, 
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)), 
+                          onPressed: _saveUsername, 
+                          child: const Text('Save & Continue', style: TextStyle(color: Colors.white))
+                        )
+                      ),
                 ],
               ),
             ),
@@ -301,21 +380,29 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         title: const Text('Add User', style: TextStyle(color: Colors.white)),
-        content: TextField(controller: searchController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'Enter username', hintStyle: TextStyle(color: Colors.white54))),
+        content: TextField(
+          controller: searchController, 
+          style: const TextStyle(color: Colors.white), 
+          decoration: const InputDecoration(
+            hintText: 'Enter username', 
+            hintStyle: TextStyle(color: Colors.white54)
+          )
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context), 
+            child: const Text('Cancel')
+          ),
           ElevatedButton(
             onPressed: () async {
               String target = searchController.text.trim().toLowerCase();
               if (target.isEmpty || target == widget.username) return;
               
-              // Check if user exists
               final res = await http.get(Uri.parse('${HiiApp.dbUrl}/usernames/$target.json?auth=${widget.token}'));
               if (res.body != 'null') {
                 String targetUid = jsonDecode(res.body);
                 String chatId = widget.uid.compareTo(targetUid) < 0 ? '${widget.uid}_$targetUid' : '${targetUid}_${widget.uid}';
                 
-                // Save chat relation
                 await http.put(Uri.parse('${HiiApp.dbUrl}/users/${widget.uid}/chats/$chatId.json?auth=${widget.token}'), body: jsonEncode(target));
                 await http.put(Uri.parse('${HiiApp.dbUrl}/users/$targetUid/chats/$chatId.json?auth=${widget.token}'), body: jsonEncode(widget.username));
                 
@@ -371,7 +458,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               padding: const EdgeInsets.all(15),
                               child: Row(
                                 children: [
-                                  CircleAvatar(backgroundColor: const Color(0xFF38BDF8), child: Text(chats[index]['peerUsername']![0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                                  CircleAvatar(
+                                    backgroundColor: const Color(0xFF38BDF8), 
+                                    child: Text(chats[index]['peerUsername']![0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+                                  ),
                                   const SizedBox(width: 15),
                                   Text('@${chats[index]['peerUsername']}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                                 ],
@@ -411,7 +501,6 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _fetchMessages();
-    // Realtime sync workaround for REST API (fetches every 3 secs)
     _timer = Timer.periodic(const Duration(seconds: 3), (timer) => _fetchMessages());
   }
 
@@ -427,7 +516,13 @@ class _ChatScreenState extends State<ChatScreen> {
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       List<Map<String, dynamic>> temp = [];
       data.forEach((key, value) {
-        temp.add({'id': key, 'sender': value['sender'], 'text': value['text'], 'type': value['type'], 'time': value['time']});
+        temp.add({
+          'id': key, 
+          'sender': value['sender'], 
+          'text': value['text'], 
+          'type': value['type'], 
+          'time': value['time']
+        });
       });
       temp.sort((a, b) => a['time'].compareTo(b['time']));
       if (mounted) setState(() => messages = temp);
@@ -440,7 +535,7 @@ class _ChatScreenState extends State<ChatScreen> {
     msgController.clear();
     
     Map<String, dynamic> msg = {'sender': widget.username, 'text': text, 'type': type, 'time': pushId};
-    setState(() => messages.add(msg)); // Update UI instantly
+    setState(() => messages.add(msg));
     
     await http.put(Uri.parse('${HiiApp.dbUrl}/chats/${widget.chatId}/$pushId.json?auth=${widget.token}'), body: jsonEncode(msg));
   }
@@ -452,9 +547,19 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         title: const Text('Send Photo', style: TextStyle(color: Colors.white)),
-        content: TextField(controller: urlController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'Paste Image URL here...', hintStyle: TextStyle(color: Colors.white54))),
+        content: TextField(
+          controller: urlController, 
+          style: const TextStyle(color: Colors.white), 
+          decoration: const InputDecoration(
+            hintText: 'Paste Image URL here...', 
+            hintStyle: TextStyle(color: Colors.white54)
+          )
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context), 
+            child: const Text('Cancel')
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
@@ -491,11 +596,24 @@ class _ChatScreenState extends State<ChatScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: isMe ? const Color(0xFF38BDF8) : Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.only(topLeft: const Radius.circular(15), topRight: const Radius.circular(15), bottomLeft: Radius.circular(isMe ? 15 : 0), bottomRight: Radius.circular(isMe ? 0 : 15)),
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(15), 
+                          topRight: const Radius.circular(15), 
+                          bottomLeft: Radius.circular(isMe ? 15 : 0), 
+                          bottomRight: Radius.circular(isMe ? 0 : 15)
+                        ),
                         border: isMe ? null : Border.all(color: Colors.white.withOpacity(0.2)),
                       ),
                       child: isImage
-                          ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.network(messages[index]['text'], width: 200, fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.broken_image, color: Colors.white)))
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(10), 
+                              child: Image.network(
+                                messages[index]['text'], 
+                                width: 200, 
+                                fit: BoxFit.cover, 
+                                errorBuilder: (c, e, s) => const Icon(Icons.broken_image, color: Colors.white)
+                              )
+                            )
                           : Text(messages[index]['text'], style: const TextStyle(color: Colors.white, fontSize: 16)),
                     ),
                   );
@@ -507,15 +625,31 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               child: Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.image, color: Colors.white70), onPressed: _sendPhotoUrl),
+                  IconButton(
+                    icon: const Icon(Icons.image, color: Colors.white70), 
+                    onPressed: _sendPhotoUrl
+                  ),
                   Expanded(
                     child: TextField(
                       controller: msgController,
                       style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(hintText: 'Type a message...', hintStyle: const TextStyle(color: Colors.white54), border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), filled: true, fillColor: Colors.white.withOpacity(0.1), contentPadding: const EdgeInsets.symmetric(horizontal: 15)),
+                      decoration: InputDecoration(
+                        hintText: 'Type a message...', 
+                        hintStyle: const TextStyle(color: Colors.white54), 
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20), 
+                          borderSide: BorderSide.none
+                        ), 
+                        filled: true, 
+                        fillColor: Colors.white.withOpacity(0.1), 
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 15)
+                      ),
                     ),
                   ),
-                  IconButton(icon: const Icon(Icons.send, color: Color(0xFF38BDF8)), onPressed: () => _sendMessage(msgController.text.trim(), 'text')),
+                  IconButton(
+                    icon: const Icon(Icons.send, color: Color(0xFF38BDF8)), 
+                    onPressed: () => _sendMessage(msgController.text.trim(), 'text')
+                  ),
                 ],
               ),
             )
