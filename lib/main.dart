@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   runApp(const HiiApp());
@@ -14,6 +15,7 @@ class HiiApp extends StatelessWidget {
 
   static const String apiKey = 'AIzaSyA1Dg_ospNbgXatGj4xnWq-1njNc5Y0dCY';
   static const String dbUrl = 'https://irsad-b0b2d-default-rtdb.asia-southeast1.firebasedatabase.app';
+  static const int currentAppVersion = 1; // ऐप का मौजूदा वर्ज़न
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +36,7 @@ class HiiApp extends StatelessWidget {
   }
 }
 
-// ================= GLASSY CONTAINER WIDGET =================
+// ================= GLASSY CONTAINER =================
 class GlassyContainer extends StatelessWidget {
   final Widget child;
   final double borderRadius;
@@ -69,7 +71,6 @@ class GlassyContainer extends StatelessWidget {
   }
 }
 
-// ================= BACKGROUND =================
 class BackgroundGradient extends StatelessWidget {
   final Widget child;
   const BackgroundGradient({super.key, required this.child});
@@ -118,18 +119,12 @@ class _AuthCheckState extends State<AuthCheck> {
         if (res.statusCode == 200 && res.body != 'null') {
           username = jsonDecode(res.body);
           await prefs.setString('auth_username', username!);
-          if (mounted) {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
-          }
+          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
         } else {
-          if (mounted) {
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: token!, uid: uid!)));
-          }
+          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: token!, uid: uid!)));
         }
       } else {
-        if (mounted) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
-        }
+        if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
       }
     } else {
       setState(() => isLoading = false);
@@ -138,13 +133,7 @@ class _AuthCheckState extends State<AuthCheck> {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Scaffold(
-        body: BackgroundGradient(
-          child: Center(child: CircularProgressIndicator())
-        )
-      );
-    }
+    if (isLoading) return const Scaffold(body: BackgroundGradient(child: Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)))));
     return const AuthScreen();
   }
 }
@@ -169,14 +158,7 @@ class _AuthScreenState extends State<AuthScreen> {
         : 'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${HiiApp.apiKey}';
 
     try {
-      final res = await http.post(
-        Uri.parse(url), 
-        body: jsonEncode({
-          'email': emailController.text.trim(), 
-          'password': passwordController.text.trim(), 
-          'returnSecureToken': true
-        })
-      );
+      final res = await http.post(Uri.parse(url), body: jsonEncode({'email': emailController.text.trim(), 'password': passwordController.text.trim(), 'returnSecureToken': true}));
       final data = jsonDecode(res.body);
       
       if (data['error'] != null) {
@@ -185,9 +167,7 @@ class _AuthScreenState extends State<AuthScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('auth_token', data['idToken']);
         await prefs.setString('auth_uid', data['localId']);
-        if (mounted) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: data['idToken'], uid: data['localId'])));
-        }
+        if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: data['idToken'], uid: data['localId'])));
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Internet Error!')));
@@ -208,45 +188,14 @@ class _AuthScreenState extends State<AuthScreen> {
                 children: [
                   const Text('hii', style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -2)),
                   const SizedBox(height: 30),
-                  TextField(
-                    controller: emailController, 
-                    style: const TextStyle(color: Colors.white), 
-                    decoration: InputDecoration(
-                      labelText: 'Email', 
-                      labelStyle: const TextStyle(color: Colors.white70), 
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
-                    )
-                  ),
+                  TextField(controller: emailController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'Email', labelStyle: const TextStyle(color: Colors.white70), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)))),
                   const SizedBox(height: 15),
-                  TextField(
-                    controller: passwordController, 
-                    obscureText: true, 
-                    style: const TextStyle(color: Colors.white), 
-                    decoration: InputDecoration(
-                      labelText: 'Password', 
-                      labelStyle: const TextStyle(color: Colors.white70), 
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
-                    )
-                  ),
+                  TextField(controller: passwordController, obscureText: true, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'Password', labelStyle: const TextStyle(color: Colors.white70), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)))),
                   const SizedBox(height: 25),
                   isLoading 
-                    ? const CircularProgressIndicator() 
-                    : SizedBox(
-                        width: double.infinity, 
-                        height: 50, 
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF38BDF8), 
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))
-                          ), 
-                          onPressed: _authenticate, 
-                          child: Text(isLogin ? 'Login' : 'Sign Up', style: const TextStyle(color: Colors.white, fontSize: 18))
-                        )
-                      ),
-                  TextButton(
-                    onPressed: () => setState(() => isLogin = !isLogin), 
-                    child: Text(isLogin ? 'Create Account' : 'Back to Login', style: const TextStyle(color: Colors.white70))
-                  )
+                    ? const CircularProgressIndicator(color: Color(0xFF38BDF8)) 
+                    : SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))), onPressed: _authenticate, child: Text(isLogin ? 'Login' : 'Sign Up', style: const TextStyle(color: Colors.white, fontSize: 18)))),
+                  TextButton(onPressed: () => setState(() => isLogin = !isLogin), child: Text(isLogin ? 'Create Account' : 'Back to Login', style: const TextStyle(color: Colors.white70)))
                 ],
               ),
             ),
@@ -257,7 +206,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 
-// ================= SETUP USERNAME SCREEN =================
+// ================= SETUP USERNAME =================
 class UsernameScreen extends StatefulWidget {
   final String token, uid;
   const UsernameScreen({super.key, required this.token, required this.uid});
@@ -271,15 +220,12 @@ class _UsernameScreenState extends State<UsernameScreen> {
 
   Future<void> _saveUsername() async {
     String un = usernameController.text.trim().toLowerCase();
-    if (un.isEmpty || un.contains(' ')) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No spaces allowed in username!')));
-      return;
-    }
+    if (un.isEmpty || un.contains(' ')) return;
     setState(() => isLoading = true);
 
     final checkRes = await http.get(Uri.parse('${HiiApp.dbUrl}/usernames/$un.json?auth=${widget.token}'));
     if (checkRes.body != 'null') {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username already taken! Try another.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username already taken!')));
       setState(() => isLoading = false);
       return;
     }
@@ -290,9 +236,7 @@ class _UsernameScreenState extends State<UsernameScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_username', un);
 
-    if (mounted) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: widget.token, uid: widget.uid, username: un)));
-    }
+    if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: widget.token, uid: widget.uid, username: un)));
   }
 
   @override
@@ -310,29 +254,9 @@ class _UsernameScreenState extends State<UsernameScreen> {
                   const SizedBox(height: 20),
                   const Text('Create Your Username', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 20),
-                  TextField(
-                    controller: usernameController, 
-                    style: const TextStyle(color: Colors.white), 
-                    decoration: InputDecoration(
-                      prefixText: '@', 
-                      prefixStyle: const TextStyle(color: Colors.white70, fontSize: 16), 
-                      labelText: 'Unique Username', 
-                      labelStyle: const TextStyle(color: Colors.white70), 
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))
-                    )
-                  ),
+                  TextField(controller: usernameController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(prefixText: '@', prefixStyle: const TextStyle(color: Colors.white70, fontSize: 16), labelText: 'Unique Username', labelStyle: const TextStyle(color: Colors.white70), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)))),
                   const SizedBox(height: 20),
-                  isLoading 
-                    ? const CircularProgressIndicator() 
-                    : SizedBox(
-                        width: double.infinity, 
-                        height: 50, 
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)), 
-                          onPressed: _saveUsername, 
-                          child: const Text('Save & Continue', style: TextStyle(color: Colors.white))
-                        )
-                      ),
+                  isLoading ? const CircularProgressIndicator(color: Color(0xFF38BDF8)) : SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)), onPressed: _saveUsername, child: const Text('Save & Continue', style: TextStyle(color: Colors.white)))),
                 ],
               ),
             ),
@@ -359,6 +283,46 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadChats();
+    _checkForUpdates(); // ऐप खुलते ही अपडेट चेक करेगा
+  }
+
+  // --- इन-ऐप अपडेट सिस्टम ---
+  Future<void> _checkForUpdates() async {
+    try {
+      final res = await http.get(Uri.parse('${HiiApp.dbUrl}/app_config.json'));
+      if (res.statusCode == 200 && res.body != 'null') {
+        final data = jsonDecode(res.body);
+        int latestVersion = data['latest_version'] ?? 1;
+        String updateUrl = data['update_url'] ?? '';
+        
+        if (latestVersion > HiiApp.currentAppVersion && updateUrl.isNotEmpty) {
+          if (mounted) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (c) => AlertDialog(
+                backgroundColor: const Color(0xFF1E293B),
+                title: const Text('Update Available! 🚀', style: TextStyle(color: Colors.white)),
+                content: const Text('A new, faster version of hii is ready. Update now to continue chatting without losing any data.', style: TextStyle(color: Colors.white70)),
+                actions: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
+                    onPressed: () async {
+                      if (!await launchUrl(Uri.parse(updateUrl), mode: LaunchMode.externalApplication)) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open download link!')));
+                      }
+                    },
+                    child: const Text('Download Update', style: TextStyle(color: Colors.white)),
+                  )
+                ],
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      // नेट स्लो हो तो चुपचाप इग्नोर कर देगा
+    }
   }
 
   Future<void> _loadChats() async {
@@ -377,23 +341,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final searchController = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         title: const Text('Add User', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: searchController, 
-          style: const TextStyle(color: Colors.white), 
-          decoration: const InputDecoration(
-            hintText: 'Enter username', 
-            hintStyle: TextStyle(color: Colors.white54)
-          )
-        ),
+        content: TextField(controller: searchController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'Enter username', hintStyle: TextStyle(color: Colors.white54))),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context), 
-            child: const Text('Cancel')
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
             onPressed: () async {
               String target = searchController.text.trim().toLowerCase();
               if (target.isEmpty || target == widget.username) return;
@@ -407,7 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 await http.put(Uri.parse('${HiiApp.dbUrl}/users/$targetUid/chats/$chatId.json?auth=${widget.token}'), body: jsonEncode(widget.username));
                 
                 if (mounted) {
-                  Navigator.pop(context);
+                  Navigator.pop(dialogContext);
                   Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(token: widget.token, uid: widget.uid, username: widget.username, peerUsername: target, chatId: chatId)));
                   _loadChats();
                 }
@@ -415,7 +370,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User not found!')));
               }
             },
-            child: const Text('Add & Chat'),
+            child: const Text('Chat', style: TextStyle(color: Colors.white)),
           )
         ],
       ),
@@ -434,16 +389,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('hii', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -1)),
-                  GlassyContainer(
-                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                    child: Text('@${widget.username}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  )
+                  GlassyContainer(padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8), child: Text('@${widget.username}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))
                 ],
               ),
             ),
             Expanded(
               child: isLoading 
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)))
                 : chats.isEmpty
                   ? const Center(child: Text('No chats yet. Tap + to add friends!', style: TextStyle(color: Colors.white70)))
                   : ListView.builder(
@@ -458,10 +410,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               padding: const EdgeInsets.all(15),
                               child: Row(
                                 children: [
-                                  CircleAvatar(
-                                    backgroundColor: const Color(0xFF38BDF8), 
-                                    child: Text(chats[index]['peerUsername']![0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
-                                  ),
+                                  CircleAvatar(backgroundColor: const Color(0xFF38BDF8), child: Text(chats[index]['peerUsername']![0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                                   const SizedBox(width: 15),
                                   Text('@${chats[index]['peerUsername']}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                                 ],
@@ -475,11 +424,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF38BDF8),
-        onPressed: _showAddUserDialog,
-        child: const Icon(Icons.chat_bubble_outline, color: Colors.white),
-      ),
+      floatingActionButton: FloatingActionButton(backgroundColor: const Color(0xFF38BDF8), onPressed: _showAddUserDialog, child: const Icon(Icons.chat_bubble_outline, color: Colors.white)),
     );
   }
 }
@@ -495,13 +440,14 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final msgController = TextEditingController();
   List<Map<String, dynamic>> messages = [];
+  Map<String, dynamic>? replyToMessage; // रिप्लाई के लिए वेरिएबल
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     _fetchMessages();
-    _timer = Timer.periodic(const Duration(seconds: 3), (timer) => _fetchMessages());
+    _timer = Timer.periodic(const Duration(seconds: 2), (timer) => _fetchMessages());
   }
 
   @override
@@ -521,10 +467,13 @@ class _ChatScreenState extends State<ChatScreen> {
           'sender': value['sender'], 
           'text': value['text'], 
           'type': value['type'], 
-          'time': value['time']
+          'time': value['time'],
+          'replyText': value['replyText'], // रिप्लाई डेटा
+          'replySender': value['replySender']
         });
       });
-      temp.sort((a, b) => a['time'].compareTo(b['time']));
+      // यहाँ मैंने लिस्ट को उल्टा (reverse) कर दिया है ताकि नया मैसेज नीचे आए
+      temp.sort((a, b) => b['time'].compareTo(a['time']));
       if (mounted) setState(() => messages = temp);
     }
   }
@@ -534,8 +483,20 @@ class _ChatScreenState extends State<ChatScreen> {
     String pushId = DateTime.now().millisecondsSinceEpoch.toString();
     msgController.clear();
     
-    Map<String, dynamic> msg = {'sender': widget.username, 'text': text, 'type': type, 'time': pushId};
-    setState(() => messages.add(msg));
+    Map<String, dynamic> msg = {
+      'sender': widget.username, 
+      'text': text, 
+      'type': type, 
+      'time': pushId,
+      if (replyToMessage != null) 'replyText': replyToMessage!['text'],
+      if (replyToMessage != null) 'replySender': replyToMessage!['sender'],
+    };
+    
+    // मैसेज भेजते ही रिप्लाई बॉक्स हटा दो
+    setState(() {
+      messages.insert(0, msg);
+      replyToMessage = null; 
+    });
     
     await http.put(Uri.parse('${HiiApp.dbUrl}/chats/${widget.chatId}/$pushId.json?auth=${widget.token}'), body: jsonEncode(msg));
   }
@@ -544,28 +505,19 @@ class _ChatScreenState extends State<ChatScreen> {
     final urlController = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         title: const Text('Send Photo', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: urlController, 
-          style: const TextStyle(color: Colors.white), 
-          decoration: const InputDecoration(
-            hintText: 'Paste Image URL here...', 
-            hintStyle: TextStyle(color: Colors.white54)
-          )
-        ),
+        content: TextField(controller: urlController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'Paste Image URL here...', hintStyle: TextStyle(color: Colors.white54))),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context), 
-            child: const Text('Cancel')
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               _sendMessage(urlController.text.trim(), 'image');
             },
-            child: const Text('Send'),
+            child: const Text('Send', style: TextStyle(color: Colors.white)),
           )
         ],
       ),
@@ -577,58 +529,110 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF0F172A),
-        title: Text('@${widget.peerUsername}', style: const TextStyle(fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text('@${widget.peerUsername}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
       ),
       body: BackgroundGradient(
         child: Column(
           children: [
             Expanded(
               child: ListView.builder(
+                reverse: true, // ऑटो-स्क्रॉल के लिए लिस्ट को उल्टा किया गया है
                 padding: const EdgeInsets.all(15),
                 itemCount: messages.length,
                 itemBuilder: (context, index) {
                   bool isMe = messages[index]['sender'] == widget.username;
                   bool isImage = messages[index]['type'] == 'image';
+                  bool isReply = messages[index]['replyText'] != null;
+
                   return Align(
                     alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isMe ? const Color(0xFF38BDF8) : Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(15), 
-                          topRight: const Radius.circular(15), 
-                          bottomLeft: Radius.circular(isMe ? 15 : 0), 
-                          bottomRight: Radius.circular(isMe ? 0 : 15)
+                    child: GestureDetector(
+                      onLongPress: () { // Long press करने पर रिप्लाई सेट होगा
+                        setState(() => replyToMessage = messages[index]);
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(12),
+                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                        decoration: BoxDecoration(
+                          color: isMe ? const Color(0xFF38BDF8) : Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(15), 
+                            topRight: const Radius.circular(15), 
+                            bottomLeft: Radius.circular(isMe ? 15 : 0), 
+                            bottomRight: Radius.circular(isMe ? 0 : 15)
+                          ),
+                          border: isMe ? null : Border.all(color: Colors.white.withOpacity(0.2)),
                         ),
-                        border: isMe ? null : Border.all(color: Colors.white.withOpacity(0.2)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // रिप्लाई वाला छोटा बॉक्स
+                            if (isReply)
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: const Border(left: BorderSide(color: Colors.white, width: 3)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('@${messages[index]['replySender']}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 2),
+                                    Text(messages[index]['replyText'], style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  ],
+                                ),
+                              ),
+                              
+                            // असली मैसेज
+                            isImage
+                                ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.network(messages[index]['text'], fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.broken_image, color: Colors.white)))
+                                : Text(messages[index]['text'], style: const TextStyle(color: Colors.white, fontSize: 16)),
+                          ],
+                        ),
                       ),
-                      child: isImage
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(10), 
-                              child: Image.network(
-                                messages[index]['text'], 
-                                width: 200, 
-                                fit: BoxFit.cover, 
-                                errorBuilder: (c, e, s) => const Icon(Icons.broken_image, color: Colors.white)
-                              )
-                            )
-                          : Text(messages[index]['text'], style: const TextStyle(color: Colors.white, fontSize: 16)),
                     ),
                   );
                 },
               ),
             ),
+            
+            // अगर कोई रिप्लाई सेट है, तो टाइपिंग बॉक्स के ऊपर दिखेगा
+            if (replyToMessage != null)
+              Container(
+                color: const Color(0xFF1E293B),
+                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                child: Row(
+                  children: [
+                    const Icon(Icons.reply, color: Color(0xFF38BDF8)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Replying to @${replyToMessage!['sender']}', style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 12)),
+                          Text(replyToMessage!['text'], style: const TextStyle(color: Colors.white70, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white54),
+                      onPressed: () => setState(() => replyToMessage = null), // रिप्लाई कैंसिल
+                    )
+                  ],
+                ),
+              ),
+
             GlassyContainer(
               borderRadius: 0,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.image, color: Colors.white70), 
-                    onPressed: _sendPhotoUrl
-                  ),
+                  IconButton(icon: const Icon(Icons.image, color: Colors.white70), onPressed: _sendPhotoUrl),
                   Expanded(
                     child: TextField(
                       controller: msgController,
@@ -636,20 +640,14 @@ class _ChatScreenState extends State<ChatScreen> {
                       decoration: InputDecoration(
                         hintText: 'Type a message...', 
                         hintStyle: const TextStyle(color: Colors.white54), 
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20), 
-                          borderSide: BorderSide.none
-                        ), 
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none), 
                         filled: true, 
                         fillColor: Colors.white.withOpacity(0.1), 
                         contentPadding: const EdgeInsets.symmetric(horizontal: 15)
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.send, color: Color(0xFF38BDF8)), 
-                    onPressed: () => _sendMessage(msgController.text.trim(), 'text')
-                  ),
+                  IconButton(icon: const Icon(Icons.send, color: Color(0xFF38BDF8)), onPressed: () => _sendMessage(msgController.text.trim(), 'text')),
                 ],
               ),
             )
@@ -658,4 +656,4 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
-}
+}          
