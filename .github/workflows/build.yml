@@ -34,16 +34,16 @@ jobs:
         rm -rf android
         flutter create --platforms android .
         
-        # 3. JSON File ko wapas uski sahi jagah rakh do
+        # 3. JSON File wapas rakho
         mkdir -p android/app
         cp /tmp/backup/google-services.json android/app/ || true
         
         # 4. Internet permission dalo
         sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
         
-        # 5. Firebase ka Engine (Gradle plugin) automatically dalo
-        sed -i '1i buildscript { repositories { google(); mavenCentral() } dependencies { classpath "com.google.gms:google-services:4.4.2" } }' android/build.gradle
-        echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
+        # 5. Firebase Engine for New Kotlin DSL (.kts)
+        sed -i '/id("com.android.application")/a \    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
+        sed -i '/id("com.android.application")/a \    id("com.google.gms.google-services")' android/app/build.gradle.kts
 
     - name: Install Dependencies
       run: flutter pub get
