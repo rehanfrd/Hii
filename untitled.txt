@@ -1,0 +1,1162 @@
+import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:ui';
+import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+// === बैकग्राउंड नोटिफिकेशन हैंडलर ===
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print("Background message received: ${message.messageId}");
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    print("Firebase init error: $e");
+  }
+  runApp(const HiiApp());
+}
+
+class HiiApp extends StatelessWidget {
+  const HiiApp({super.key});
+
+  static const String apiKey = 'AIzaSyA1Dg_ospNbgXatGj4xnWq-1njNc5Y0dCY';
+  static const String dbUrl = 'https://irsad-b0b2d-default-rtdb.asia-southeast1.firebasedatabase.app';
+  static const int currentAppVersion = 5; // Version updated to 5
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'hii',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF0F172A),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF38BDF8),
+          secondary: Color(0xFF818CF8),
+        ),
+      ),
+      home: const AuthCheck(),
+    );
+  }
+}
+
+// ================= GLASSY CONTAINER (Premium UI) =================
+class GlassyContainer extends StatelessWidget {
+  final Widget child;
+  final double borderRadius;
+  final EdgeInsets padding;
+  final double opacity;
+
+  const GlassyContainer({
+    super.key, 
+    required this.child, 
+    this.borderRadius = 24, 
+    this.padding = const EdgeInsets.all(20), 
+    this.opacity = 0.1
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(opacity),
+            borderRadius: BorderRadius.circular(borderRadius),
+            border: Border.all(color: Colors.white.withOpacity(0.15)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class BackgroundGradient extends StatelessWidget {
+  final Widget child;
+  const BackgroundGradient({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF1E1B4B), Color(0xFF0F172A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: SafeArea(child: child),
+    );
+  }
+}
+
+// ================= AUTH CHECK =================
+class AuthCheck extends StatefulWidget {
+  const AuthCheck({super.key});
+  @override
+  State<AuthCheck> createState() => _AuthCheckState();
+}
+
+class _AuthCheckState extends State<AuthCheck> {
+  bool isLoading = true;
+  String? token, uid, username;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    token = prefs.getString('auth_token');
+    uid = prefs.getString('auth_uid');
+    username = prefs.getString('auth_username');
+    
+    if (token != null && uid != null) {
+      if (username == null || username!.isEmpty) {
+        final res = await http.get(Uri.parse('${HiiApp.dbUrl}/users/$uid/username.json?auth=$token'));
+        if (res.statusCode == 200 && res.body != 'null') {
+          username = jsonDecode(res.body);
+          await prefs.setString('auth_username', username!);
+          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
+        } else {
+          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: token!, uid: uid!)));
+        }
+      } else {
+        if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
+      }
+    } else {
+      setState(() => isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) return const Scaffold(body: BackgroundGradient(child: Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)))));
+    return const AuthScreen();
+  }
+}
+
+// ================= AUTH SCREEN =================
+class AuthScreen extends StatefulWidget {
+  const AuthScreen({super.key});
+  @override
+  State<AuthScreen> createState() => _AuthScreenState();
+}
+
+class _AuthScreenState extends State<AuthScreen> {
+  bool isLogin = true, isLoading = false;
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  Future<void> _authenticate() async {
+    if (emailController.text.isEmpty || passwordController.text.isEmpty) return;
+    setState(() => isLoading = true);
+    
+    final url = isLogin 
+        ? 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${HiiApp.apiKey}'
+        : 'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${HiiApp.apiKey}';
+
+    try {
+      final res = await http.post(Uri.parse(url), body: jsonEncode({'email': emailController.text.trim(), 'password': passwordController.text.trim(), 'returnSecureToken': true}));
+      final data = jsonDecode(res.body);
+      
+      if (data['error'] != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['error']['message'])));
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('auth_token', data['idToken']);
+        await prefs.setString('auth_uid', data['localId']);
+        
+        // --- LOGIN FIX: Check if existing user has a username ---
+        final userRes = await http.get(Uri.parse('${HiiApp.dbUrl}/users/${data['localId']}/username.json?auth=${data['idToken']}'));
+        if (userRes.statusCode == 200 && userRes.body != 'null') {
+          String existingUsername = jsonDecode(userRes.body);
+          await prefs.setString('auth_username', existingUsername);
+          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: data['idToken'], uid: data['localId'], username: existingUsername)));
+        } else {
+          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: data['idToken'], uid: data['localId'])));
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Internet Error!')));
+    }
+    if (mounted) setState(() => isLoading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: BackgroundGradient(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(30),
+            child: GlassyContainer(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('hii', style: TextStyle(fontSize: 52, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -2)),
+                  const SizedBox(height: 30),
+                  TextField(controller: emailController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'Email', prefixIcon: const Icon(Icons.email_rounded, color: Colors.white70), labelStyle: const TextStyle(color: Colors.white70), border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)))),
+                  const SizedBox(height: 15),
+                  TextField(controller: passwordController, obscureText: true, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_rounded, color: Colors.white70), labelStyle: const TextStyle(color: Colors.white70), border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)))),
+                  const SizedBox(height: 25),
+                  isLoading 
+                    ? const CircularProgressIndicator(color: Color(0xFF38BDF8)) 
+                    : SizedBox(width: double.infinity, height: 55, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))), onPressed: _authenticate, child: Text(isLogin ? 'Login' : 'Sign Up', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)))),
+                  TextButton(onPressed: () => setState(() => isLogin = !isLogin), child: Text(isLogin ? 'Create Account' : 'Back to Login', style: const TextStyle(color: Colors.white70)))
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ================= SETUP USERNAME =================
+class UsernameScreen extends StatefulWidget {
+  final String token, uid;
+  const UsernameScreen({super.key, required this.token, required this.uid});
+  @override
+  State<UsernameScreen> createState() => _UsernameScreenState();
+}
+
+class _UsernameScreenState extends State<UsernameScreen> {
+  final usernameController = TextEditingController();
+  bool isLoading = false;
+
+  Future<void> _saveUsername() async {
+    String un = usernameController.text.trim().toLowerCase();
+    if (un.isEmpty || un.contains(' ')) return;
+    setState(() => isLoading = true);
+
+    final checkRes = await http.get(Uri.parse('${HiiApp.dbUrl}/usernames/$un.json?auth=${widget.token}'));
+    if (checkRes.body != 'null') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username already taken!')));
+      setState(() => isLoading = false);
+      return;
+    }
+
+    await http.put(Uri.parse('${HiiApp.dbUrl}/usernames/$un.json?auth=${widget.token}'), body: jsonEncode(widget.uid));
+    await http.put(Uri.parse('${HiiApp.dbUrl}/users/${widget.uid}/username.json?auth=${widget.token}'), body: jsonEncode(un));
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_username', un);
+
+    if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: widget.token, uid: widget.uid, username: un)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: BackgroundGradient(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(30),
+            child: GlassyContainer(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.person_pin_rounded, size: 70, color: Color(0xFF38BDF8)),
+                  const SizedBox(height: 20),
+                  const Text('Set Username', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 20),
+                  TextField(controller: usernameController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(prefixText: '@', prefixStyle: const TextStyle(color: Colors.white70, fontSize: 18), hintText: 'unique_name', hintStyle: const TextStyle(color: Colors.white38), border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)))),
+                  const SizedBox(height: 20),
+                  isLoading ? const CircularProgressIndicator(color: Color(0xFF38BDF8)) : SizedBox(width: double.infinity, height: 55, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))), onPressed: _saveUsername, child: const Text('Save & Start Chatting', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)))),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ================= HOME SCREEN =================
+class HomeScreen extends StatefulWidget {
+  final String token, uid, username;
+  const HomeScreen({super.key, required this.token, required this.uid, required this.username});
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  List<Map<String, String>> chats = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChats();
+    _checkForUpdates();
+    _setupNotifications();
+  }
+
+  Future<void> _setupNotifications() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission();
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${message.notification!.title}: ${message.notification!.body}', style: const TextStyle(color: Colors.white)),
+          backgroundColor: const Color(0xFF38BDF8),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        ));
+      }
+    });
+  }
+
+  Future<void> _checkForUpdates() async {
+    try {
+      final res = await http.get(Uri.parse('${HiiApp.dbUrl}/app_config.json'));
+      if (res.statusCode == 200 && res.body != 'null') {
+        final data = jsonDecode(res.body);
+        int latestVersion = data['latest_version'] ?? 1;
+        String updateUrl = data['update_url'] ?? '';
+        
+        if (latestVersion > HiiApp.currentAppVersion && updateUrl.isNotEmpty) {
+          if (mounted) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (c) => AlertDialog(
+                backgroundColor: const Color(0xFF1E293B),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                title: const Text('Update Available! 🚀', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                content: const Text('A new, faster version of hii is ready. Update now to continue chatting.', style: TextStyle(color: Colors.white70)),
+                actions: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
+                    onPressed: () async {
+                      if (!await launchUrl(Uri.parse(updateUrl), mode: LaunchMode.externalApplication)) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open download link!')));
+                      }
+                    },
+                    child: const Text('Download', style: TextStyle(color: Colors.white)),
+                  )
+                ],
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  Future<void> _loadChats() async {
+    final res = await http.get(Uri.parse('${HiiApp.dbUrl}/users/${widget.uid}/chats.json?auth=${widget.token}'));
+    if (res.statusCode == 200 && res.body != 'null') {
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      chats.clear();
+      data.forEach((key, value) {
+        chats.add({'chatId': key, 'peerUsername': value.toString()});
+      });
+    }
+    if (mounted) setState(() => isLoading = false);
+  }
+
+  void _showAddUserDialog() {
+    final searchController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('New Chat', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: TextField(controller: searchController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: '@username', hintStyle: const TextStyle(color: Colors.white38), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)))),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
+            onPressed: () async {
+              String target = searchController.text.trim().toLowerCase();
+              if (target.isEmpty || target == widget.username) return;
+              
+              final res = await http.get(Uri.parse('${HiiApp.dbUrl}/usernames/$target.json?auth=${widget.token}'));
+              if (res.body != 'null') {
+                String targetUid = jsonDecode(res.body);
+                String chatId = widget.uid.compareTo(targetUid) < 0 ? '${widget.uid}_$targetUid' : '${targetUid}_${widget.uid}';
+                
+                await http.put(Uri.parse('${HiiApp.dbUrl}/users/${widget.uid}/chats/$chatId.json?auth=${widget.token}'), body: jsonEncode(target));
+                await http.put(Uri.parse('${HiiApp.dbUrl}/users/$targetUid/chats/$chatId.json?auth=${widget.token}'), body: jsonEncode(widget.username));
+                
+                if (mounted) {
+                  Navigator.pop(dialogContext);
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(token: widget.token, uid: widget.uid, username: widget.username, peerUsername: target, chatId: chatId)));
+                  _loadChats();
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User not found!')));
+              }
+            },
+            child: const Text('Message', style: TextStyle(color: Colors.white)),
+          )
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: BackgroundGradient(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('hii', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -1)),
+                  GlassyContainer(padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8), borderRadius: 30, child: Text('@${widget.username}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))
+                ],
+              ),
+            ),
+            Expanded(
+              child: isLoading 
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)))
+                : chats.isEmpty
+                  ? const Center(child: Text('No chats yet. Tap the + icon below!', style: TextStyle(color: Colors.white54, fontSize: 16)))
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                      itemCount: chats.length,
+                      itemBuilder: (context, index) {
+                        return Paddingimport 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:ui';
+import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+// === बैकग्राउंड नोटिफिकेशन हैंडलर ===
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print("Background message received: ${message.messageId}");
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    print("Firebase init error: $e");
+  }
+  runApp(const HiiApp());
+}
+
+class HiiApp extends StatelessWidget {
+  const HiiApp({super.key});
+
+  static const String apiKey = 'AIzaSyA1Dg_ospNbgXatGj4xnWq-1njNc5Y0dCY';
+  static const String dbUrl = 'https://irsad-b0b2d-default-rtdb.asia-southeast1.firebasedatabase.app';
+  static const int currentAppVersion = 5; // Version updated to 5
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'hii',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF0F172A),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF38BDF8),
+          secondary: Color(0xFF818CF8),
+        ),
+      ),
+      home: const AuthCheck(),
+    );
+  }
+}
+
+// ================= GLASSY CONTAINER (Premium UI) =================
+class GlassyContainer extends StatelessWidget {
+  final Widget child;
+  final double borderRadius;
+  final EdgeInsets padding;
+  final double opacity;
+
+  const GlassyContainer({
+    super.key, 
+    required this.child, 
+    this.borderRadius = 24, 
+    this.padding = const EdgeInsets.all(20), 
+    this.opacity = 0.1
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(opacity),
+            borderRadius: BorderRadius.circular(borderRadius),
+            border: Border.all(color: Colors.white.withOpacity(0.15)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class BackgroundGradient extends StatelessWidget {
+  final Widget child;
+  const BackgroundGradient({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF1E1B4B), Color(0xFF0F172A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: SafeArea(child: child),
+    );
+  }
+}
+
+// ================= AUTH CHECK =================
+class AuthCheck extends StatefulWidget {
+  const AuthCheck({super.key});
+  @override
+  State<AuthCheck> createState() => _AuthCheckState();
+}
+
+class _AuthCheckState extends State<AuthCheck> {
+  bool isLoading = true;
+  String? token, uid, username;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    token = prefs.getString('auth_token');
+    uid = prefs.getString('auth_uid');
+    username = prefs.getString('auth_username');
+    
+    if (token != null && uid != null) {
+      if (username == null || username!.isEmpty) {
+        final res = await http.get(Uri.parse('${HiiApp.dbUrl}/users/$uid/username.json?auth=$token'));
+        if (res.statusCode == 200 && res.body != 'null') {
+          username = jsonDecode(res.body);
+          await prefs.setString('auth_username', username!);
+          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
+        } else {
+          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: token!, uid: uid!)));
+        }
+      } else {
+        if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: token!, uid: uid!, username: username!)));
+      }
+    } else {
+      setState(() => isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) return const Scaffold(body: BackgroundGradient(child: Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)))));
+    return const AuthScreen();
+  }
+}
+
+// ================= AUTH SCREEN =================
+class AuthScreen extends StatefulWidget {
+  const AuthScreen({super.key});
+  @override
+  State<AuthScreen> createState() => _AuthScreenState();
+}
+
+class _AuthScreenState extends State<AuthScreen> {
+  bool isLogin = true, isLoading = false;
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  Future<void> _authenticate() async {
+    if (emailController.text.isEmpty || passwordController.text.isEmpty) return;
+    setState(() => isLoading = true);
+    
+    final url = isLogin 
+        ? 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${HiiApp.apiKey}'
+        : 'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${HiiApp.apiKey}';
+
+    try {
+      final res = await http.post(Uri.parse(url), body: jsonEncode({'email': emailController.text.trim(), 'password': passwordController.text.trim(), 'returnSecureToken': true}));
+      final data = jsonDecode(res.body);
+      
+      if (data['error'] != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['error']['message'])));
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('auth_token', data['idToken']);
+        await prefs.setString('auth_uid', data['localId']);
+        
+        // --- LOGIN FIX: Check if existing user has a username ---
+        final userRes = await http.get(Uri.parse('${HiiApp.dbUrl}/users/${data['localId']}/username.json?auth=${data['idToken']}'));
+        if (userRes.statusCode == 200 && userRes.body != 'null') {
+          String existingUsername = jsonDecode(userRes.body);
+          await prefs.setString('auth_username', existingUsername);
+          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: data['idToken'], uid: data['localId'], username: existingUsername)));
+        } else {
+          if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => UsernameScreen(token: data['idToken'], uid: data['localId'])));
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Internet Error!')));
+    }
+    if (mounted) setState(() => isLoading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: BackgroundGradient(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(30),
+            child: GlassyContainer(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('hii', style: TextStyle(fontSize: 52, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -2)),
+                  const SizedBox(height: 30),
+                  TextField(controller: emailController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'Email', prefixIcon: const Icon(Icons.email_rounded, color: Colors.white70), labelStyle: const TextStyle(color: Colors.white70), border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)))),
+                  const SizedBox(height: 15),
+                  TextField(controller: passwordController, obscureText: true, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_rounded, color: Colors.white70), labelStyle: const TextStyle(color: Colors.white70), border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)))),
+                  const SizedBox(height: 25),
+                  isLoading 
+                    ? const CircularProgressIndicator(color: Color(0xFF38BDF8)) 
+                    : SizedBox(width: double.infinity, height: 55, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))), onPressed: _authenticate, child: Text(isLogin ? 'Login' : 'Sign Up', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)))),
+                  TextButton(onPressed: () => setState(() => isLogin = !isLogin), child: Text(isLogin ? 'Create Account' : 'Back to Login', style: const TextStyle(color: Colors.white70)))
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ================= SETUP USERNAME =================
+class UsernameScreen extends StatefulWidget {
+  final String token, uid;
+  const UsernameScreen({super.key, required this.token, required this.uid});
+  @override
+  State<UsernameScreen> createState() => _UsernameScreenState();
+}
+
+class _UsernameScreenState extends State<UsernameScreen> {
+  final usernameController = TextEditingController();
+  bool isLoading = false;
+
+  Future<void> _saveUsername() async {
+    String un = usernameController.text.trim().toLowerCase();
+    if (un.isEmpty || un.contains(' ')) return;
+    setState(() => isLoading = true);
+
+    final checkRes = await http.get(Uri.parse('${HiiApp.dbUrl}/usernames/$un.json?auth=${widget.token}'));
+    if (checkRes.body != 'null') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username already taken!')));
+      setState(() => isLoading = false);
+      return;
+    }
+
+    await http.put(Uri.parse('${HiiApp.dbUrl}/usernames/$un.json?auth=${widget.token}'), body: jsonEncode(widget.uid));
+    await http.put(Uri.parse('${HiiApp.dbUrl}/users/${widget.uid}/username.json?auth=${widget.token}'), body: jsonEncode(un));
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_username', un);
+
+    if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen(token: widget.token, uid: widget.uid, username: un)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: BackgroundGradient(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(30),
+            child: GlassyContainer(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.person_pin_rounded, size: 70, color: Color(0xFF38BDF8)),
+                  const SizedBox(height: 20),
+                  const Text('Set Username', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 20),
+                  TextField(controller: usernameController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(prefixText: '@', prefixStyle: const TextStyle(color: Colors.white70, fontSize: 18), hintText: 'unique_name', hintStyle: const TextStyle(color: Colors.white38), border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)))),
+                  const SizedBox(height: 20),
+                  isLoading ? const CircularProgressIndicator(color: Color(0xFF38BDF8)) : SizedBox(width: double.infinity, height: 55, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))), onPressed: _saveUsername, child: const Text('Save & Start Chatting', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)))),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ================= HOME SCREEN =================
+class HomeScreen extends StatefulWidget {
+  final String token, uid, username;
+  const HomeScreen({super.key, required this.token, required this.uid, required this.username});
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  List<Map<String, String>> chats = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChats();
+    _checkForUpdates();
+    _setupNotifications();
+  }
+
+  Future<void> _setupNotifications() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission();
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${message.notification!.title}: ${message.notification!.body}', style: const TextStyle(color: Colors.white)),
+          backgroundColor: const Color(0xFF38BDF8),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        ));
+      }
+    });
+  }
+
+  Future<void> _checkForUpdates() async {
+    try {
+      final res = await http.get(Uri.parse('${HiiApp.dbUrl}/app_config.json'));
+      if (res.statusCode == 200 && res.body != 'null') {
+        final data = jsonDecode(res.body);
+        int latestVersion = data['latest_version'] ?? 1;
+        String updateUrl = data['update_url'] ?? '';
+        
+        if (latestVersion > HiiApp.currentAppVersion && updateUrl.isNotEmpty) {
+          if (mounted) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (c) => AlertDialog(
+                backgroundColor: const Color(0xFF1E293B),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                title: const Text('Update Available! 🚀', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                content: const Text('A new, faster version of hii is ready. Update now to continue chatting.', style: TextStyle(color: Colors.white70)),
+                actions: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
+                    onPressed: () async {
+                      if (!await launchUrl(Uri.parse(updateUrl), mode: LaunchMode.externalApplication)) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open download link!')));
+                      }
+                    },
+                    child: const Text('Download', style: TextStyle(color: Colors.white)),
+                  )
+                ],
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  Future<void> _loadChats() async {
+    final res = await http.get(Uri.parse('${HiiApp.dbUrl}/users/${widget.uid}/chats.json?auth=${widget.token}'));
+    if (res.statusCode == 200 && res.body != 'null') {
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      chats.clear();
+      data.forEach((key, value) {
+        chats.add({'chatId': key, 'peerUsername': value.toString()});
+      });
+    }
+    if (mounted) setState(() => isLoading = false);
+  }
+
+  void _showAddUserDialog() {
+    final searchController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('New Chat', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: TextField(controller: searchController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: '@username', hintStyle: const TextStyle(color: Colors.white38), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)))),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
+            onPressed: () async {
+              String target = searchController.text.trim().toLowerCase();
+              if (target.isEmpty || target == widget.username) return;
+              
+              final res = await http.get(Uri.parse('${HiiApp.dbUrl}/usernames/$target.json?auth=${widget.token}'));
+              if (res.body != 'null') {
+                String targetUid = jsonDecode(res.body);
+                String chatId = widget.uid.compareTo(targetUid) < 0 ? '${widget.uid}_$targetUid' : '${targetUid}_${widget.uid}';
+                
+                await http.put(Uri.parse('${HiiApp.dbUrl}/users/${widget.uid}/chats/$chatId.json?auth=${widget.token}'), body: jsonEncode(target));
+                await http.put(Uri.parse('${HiiApp.dbUrl}/users/$targetUid/chats/$chatId.json?auth=${widget.token}'), body: jsonEncode(widget.username));
+                
+                if (mounted) {
+                  Navigator.pop(dialogContext);
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(token: widget.token, uid: widget.uid, username: widget.username, peerUsername: target, chatId: chatId)));
+                  _loadChats();
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User not found!')));
+              }
+            },
+            child: const Text('Message', style: TextStyle(color: Colors.white)),
+          )
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: BackgroundGradient(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('hii', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -1)),
+                  GlassyContainer(padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8), borderRadius: 30, child: Text('@${widget.username}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))
+                ],
+              ),
+            ),
+            Expanded(
+              child: isLoading 
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)))
+                : chats.isEmpty
+                  ? const Center(child: Text('No chats yet. Tap the + icon below!', style: TextStyle(color: Colors.white54, fontSize: 16)))
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                      itemCount: chats.length,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(24),
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(token: widget.token, uid: widget.uid, username: widget.username, peerUsername: chats[index]['peerUsername']!, chatId: chats[index]['chatId']!))),
+                            child: GlassyContainer(
+                              padding: const EdgeInsets.all(18),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(radius: 25, backgroundColor: const Color(0xFF38BDF8), child: Text(chats[index]['peerUsername']![0].toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold))),
+                                  const SizedBox(width: 15),
+                                  Text('@${chats[index]['peerUsername']}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(backgroundColor: const Color(0xFF38BDF8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)), onPressed: _showAddUserDialog, child: const Icon(Icons.edit_square, color: Colors.white)),
+    );
+  }
+}
+
+// ================= CHAT SCREEN =================
+class ChatScreen extends StatefulWidget {
+  final String token, uid, username, peerUsername, chatId;
+  const ChatScreen({super.key, required this.token, required this.uid, required this.username, required this.peerUsername, required this.chatId});
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final msgController = TextEditingController();
+  List<Map<String, dynamic>> messages = [];
+  Map<String, dynamic>? replyToMessage;
+  Timer? _timer;
+  
+  // Emojis array for the premium top bar
+  final List<String> quickEmojis = ['😂', '❤️', '🔥', '👍', '🥺', '🎉'];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMessages();
+    _timer = Timer.periodic(const Duration(seconds: 2), (timer) => _fetchMessages());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchMessages() async {
+    final res = await http.get(Uri.parse('${HiiApp.dbUrl}/chats/${widget.chatId}.json?auth=${widget.token}'));
+    if (res.statusCode == 200 && res.body != 'null') {
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      List<Map<String, dynamic>> temp = [];
+      data.forEach((key, value) {
+        temp.add({
+          'id': key, 
+          'sender': value['sender'], 
+          'text': value['text'], 
+          'type': value['type'], 
+          'time': value['time'],
+          'replyText': value['replyText'],
+          'replySender': value['replySender']
+        });
+      });
+      temp.sort((a, b) => b['time'].compareTo(a['time']));
+      if (mounted) setState(() => messages = temp);
+    }
+  }
+
+  Future<void> _sendMessage(String text, String type) async {
+    if (text.isEmpty) return;
+    String pushId = DateTime.now().millisecondsSinceEpoch.toString();
+    msgController.clear();
+    
+    Map<String, dynamic> msg = {
+      'sender': widget.username, 
+      'text': text, 
+      'type': type, 
+      'time': pushId,
+      if (replyToMessage != null) 'replyText': replyToMessage!['text'],
+      if (replyToMessage != null) 'replySender': replyToMessage!['sender'],
+    };
+    
+    setState(() {
+      messages.insert(0, msg);
+      replyToMessage = null; 
+    });
+    
+    await http.put(Uri.parse('${HiiApp.dbUrl}/chats/${widget.chatId}/$pushId.json?auth=${widget.token}'), body: jsonEncode(msg));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0F172A),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Row(
+          children: [
+            CircleAvatar(radius: 18, backgroundColor: const Color(0xFF38BDF8), child: Text(widget.peerUsername[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))),
+            const SizedBox(width: 12),
+            Text('@${widget.peerUsername}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 20)),
+          ],
+        ),
+      ),
+      body: BackgroundGradient(
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                reverse: true,
+                padding: const EdgeInsets.all(15),
+                itemCount: messages.length,
+                itemBuilder: (context, index) {
+                  bool isMe = messages[index]['sender'] == widget.username;
+                  bool isReply = messages[index]['replyText'] != null;
+
+                  return Align(
+                    alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                    child: GestureDetector(
+                      onLongPress: () {
+                        setState(() => replyToMessage = messages[index]);
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(14),
+                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                        decoration: BoxDecoration(
+                          gradient: isMe 
+                            ? const LinearGradient(colors: [Color(0xFF38BDF8), Color(0xFF2563EB)])
+                            : const LinearGradient(colors: [Color(0xFF334155), Color(0xFF1E293B)]),
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(20), 
+                            topRight: const Radius.circular(20), 
+                            bottomLeft: Radius.circular(isMe ? 20 : 5), 
+                            bottomRight: Radius.circular(isMe ? 5 : 20)
+                          ),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 5, offset: const Offset(0, 3))
+                          ]
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (isReply)
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.25),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: const Border(left: BorderSide(color: Colors.white, width: 3)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('@${messages[index]['replySender']}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 2),
+                                    Text(messages[index]['replyText'], style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  ],
+                                ),
+                              ),
+                            Text(messages[index]['text'], style: const TextStyle(color: Colors.white, fontSize: 16)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            
+            // --- Reply Box ---
+            if (replyToMessage != null)
+              Container(
+                color: const Color(0xFF1E293B).withOpacity(0.9),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.reply_rounded, color: Color(0xFF38BDF8)),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Replying to @${replyToMessage!['sender']}', style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 3),
+                          Text(replyToMessage!['text'], style: const TextStyle(color: Colors.white70, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white54),
+                      onPressed: () => setState(() => replyToMessage = null),
+                    )
+                  ],
+                ),
+              ),
+
+            // --- Premium Glassy Input Area ---
+            GlassyContainer(
+              borderRadius: 0,
+              padding: const EdgeInsets.only(top: 10, bottom: 15, left: 10, right: 10),
+              child: Column(
+                children: [
+                  // Quick Emoji Bar
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10, left: 10, right: 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: quickEmojis.map((emoji) => GestureDetector(
+                        onTap: () {
+                          msgController.text += emoji;
+                        },
+                        child: Text(emoji, style: const TextStyle(fontSize: 24)),
+                      )).toList(),
+                    ),
+                  ),
+                  
+                  // Message Input Row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: msgController,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          decoration: InputDecoration(
+                            hintText: 'Message...', 
+                            hintStyle: const TextStyle(color: Colors.white54), 
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none), 
+                            filled: true, 
+                            fillColor: Colors.black.withOpacity(0.2), 
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color(0xFF38BDF8),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.send_rounded, color: Colors.white), 
+                          onPressed: () => _sendMessage(msgController.text.trim(), 'text')
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(24),
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ChatScreen(token: widget.token, uid: widget.uid, username: widget.username, pe
