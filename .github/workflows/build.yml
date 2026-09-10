@@ -38,8 +38,8 @@ jobs:
         mkdir -p android/app
         cp /tmp/backup/google-services.json android/app/ || true
         
-        # 4. PACKAGE NAME FIX (Firebase aur App ka naam same karo)
-        sed -i 's/com.example.hii_messenger/com.example.hii/g' android/app/build.gradle.kts
+        # 4. PACKAGE NAME FIX (Sirf ID change hogi, andarni rasta nahi tootega)
+        sed -i 's/applicationId = "com.example.hii_messenger"/applicationId = "com.example.hii"/g' android/app/build.gradle.kts
         
         # 5. Internet permission dalo
         sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
