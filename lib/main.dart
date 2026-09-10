@@ -5,8 +5,23 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
-void main() {
+// === बैकग्राउंड नोटिफिकेशन हैंडलर (जब ऐप बंद हो) ===
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print("Background message received: ${message.messageId}");
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    print("Firebase init error: $e");
+  }
   runApp(const HiiApp());
 }
 
@@ -15,7 +30,7 @@ class HiiApp extends StatelessWidget {
 
   static const String apiKey = 'AIzaSyA1Dg_ospNbgXatGj4xnWq-1njNc5Y0dCY';
   static const String dbUrl = 'https://irsad-b0b2d-default-rtdb.asia-southeast1.firebasedatabase.app';
-  static const int currentAppVersion = 1; // ऐप का मौजूदा वर्ज़न
+  static const int currentAppVersion = 1;
 
   @override
   Widget build(BuildContext context) {
@@ -283,7 +298,25 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadChats();
-    _checkForUpdates(); // ऐप खुलते ही अपडेट चेक करेगा
+    _checkForUpdates();
+    _setupNotifications(); // नोटिफिकेशन्स चालू करने का फंक्शन
+  }
+
+  // --- नोटिफिकेशन सेटअप ---
+  Future<void> _setupNotifications() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission(); // यूज़र से परमिशन मांगना
+
+    // जब ऐप खुला हो और नया मैसेज आए
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${message.notification!.title}: ${message.notification!.body}', style: const TextStyle(color: Colors.white)),
+          backgroundColor: const Color(0xFF38BDF8),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    });
   }
 
   // --- इन-ऐप अपडेट सिस्टम ---
@@ -320,9 +353,7 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
       }
-    } catch (e) {
-      // नेट स्लो हो तो चुपचाप इग्नोर कर देगा
-    }
+    } catch (e) {}
   }
 
   Future<void> _loadChats() async {
@@ -440,7 +471,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final msgController = TextEditingController();
   List<Map<String, dynamic>> messages = [];
-  Map<String, dynamic>? replyToMessage; // रिप्लाई के लिए वेरिएबल
+  Map<String, dynamic>? replyToMessage;
   Timer? _timer;
 
   @override
@@ -468,11 +499,10 @@ class _ChatScreenState extends State<ChatScreen> {
           'text': value['text'], 
           'type': value['type'], 
           'time': value['time'],
-          'replyText': value['replyText'], // रिप्लाई डेटा
+          'replyText': value['replyText'],
           'replySender': value['replySender']
         });
       });
-      // यहाँ मैंने लिस्ट को उल्टा (reverse) कर दिया है ताकि नया मैसेज नीचे आए
       temp.sort((a, b) => b['time'].compareTo(a['time']));
       if (mounted) setState(() => messages = temp);
     }
@@ -492,7 +522,6 @@ class _ChatScreenState extends State<ChatScreen> {
       if (replyToMessage != null) 'replySender': replyToMessage!['sender'],
     };
     
-    // मैसेज भेजते ही रिप्लाई बॉक्स हटा दो
     setState(() {
       messages.insert(0, msg);
       replyToMessage = null; 
@@ -537,7 +566,7 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             Expanded(
               child: ListView.builder(
-                reverse: true, // ऑटो-स्क्रॉल के लिए लिस्ट को उल्टा किया गया है
+                reverse: true,
                 padding: const EdgeInsets.all(15),
                 itemCount: messages.length,
                 itemBuilder: (context, index) {
@@ -548,7 +577,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   return Align(
                     alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                     child: GestureDetector(
-                      onLongPress: () { // Long press करने पर रिप्लाई सेट होगा
+                      onLongPress: () {
                         setState(() => replyToMessage = messages[index]);
                       },
                       child: Container(
@@ -568,7 +597,6 @@ class _ChatScreenState extends State<ChatScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // रिप्लाई वाला छोटा बॉक्स
                             if (isReply)
                               Container(
                                 margin: const EdgeInsets.only(bottom: 8),
@@ -587,8 +615,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                   ],
                                 ),
                               ),
-                              
-                            // असली मैसेज
                             isImage
                                 ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.network(messages[index]['text'], fit: BoxFit.cover, errorBuilder: (c, e, s) => const Icon(Icons.broken_image, color: Colors.white)))
                                 : Text(messages[index]['text'], style: const TextStyle(color: Colors.white, fontSize: 16)),
@@ -600,8 +626,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
             ),
-            
-            // अगर कोई रिप्लाई सेट है, तो टाइपिंग बॉक्स के ऊपर दिखेगा
             if (replyToMessage != null)
               Container(
                 color: const Color(0xFF1E293B),
@@ -621,12 +645,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white54),
-                      onPressed: () => setState(() => replyToMessage = null), // रिप्लाई कैंसिल
+                      onPressed: () => setState(() => replyToMessage = null),
                     )
                   ],
                 ),
               ),
-
             GlassyContainer(
               borderRadius: 0,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -656,4 +679,4 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
-}          
+}
