@@ -24,11 +24,26 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Setup Android & Internet
+    - name: Setup Android & Firebase Engine
       run: |
+        # 1. JSON File ko safe jagah (backup) mein copy karo
+        mkdir -p /tmp/backup
+        cp android/app/google-services.json /tmp/backup/ || echo "File abhi nahi hai"
+        
+        # 2. Android folder delete karke naya banao
         rm -rf android
         flutter create --platforms android .
+        
+        # 3. JSON File ko wapas uski sahi jagah rakh do
+        mkdir -p android/app
+        cp /tmp/backup/google-services.json android/app/ || true
+        
+        # 4. Internet permission dalo
         sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
+        
+        # 5. Firebase ka Engine (Gradle plugin) automatically dalo
+        sed -i '1i buildscript { repositories { google(); mavenCentral() } dependencies { classpath "com.google.gms:google-services:4.4.2" } }' android/build.gradle
+        echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
 
     - name: Install Dependencies
       run: flutter pub get
