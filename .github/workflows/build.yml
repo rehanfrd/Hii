@@ -38,10 +38,13 @@ jobs:
         mkdir -p android/app
         cp /tmp/backup/google-services.json android/app/ || true
         
-        # 4. Internet permission dalo
+        # 4. PACKAGE NAME FIX (Firebase aur App ka naam same karo)
+        sed -i 's/com.example.hii_messenger/com.example.hii/g' android/app/build.gradle.kts
+        
+        # 5. Internet permission dalo
         sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
         
-        # 5. Firebase Engine for New Kotlin DSL (.kts)
+        # 6. Firebase Engine dalo
         sed -i '/id("com.android.application")/a \    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
         sed -i '/id("com.android.application")/a \    id("com.google.gms.google-services")' android/app/build.gradle.kts
 
