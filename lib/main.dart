@@ -30,7 +30,7 @@ class HiiApp extends StatelessWidget {
 
   static const String apiKey = 'AIzaSyA1Dg_ospNbgXatGj4xnWq-1njNc5Y0dCY';
   static const String dbUrl = 'https://irsad-b0b2d-default-rtdb.asia-southeast1.firebasedatabase.app';
-  static const int currentAppVersion = 1;
+  static const int currentAppVersion = 3;
 
   @override
   Widget build(BuildContext context) {
