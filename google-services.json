@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "781397402151",
+    "firebase_url": "https://irsad-b0b2d-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "irsad-b0b2d",
+    "storage_bucket": "irsad-b0b2d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:781397402151:android:6e458c693cd8f645206402",
+        "android_client_info": {
+          "package_name": "com.example.hii"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYwx3mrfqMYtHF52SBuFIeADSUVe2Dwkk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
