@@ -17,19 +17,58 @@ class _ChatScreenState extends State<ChatScreen> {
   List<Map<String, dynamic>> messages = [];
   Map<String, dynamic>? replyToMessage;
   Timer? _timer;
+  
+  bool isPeerOnline = false;
+  String lastSeenText = "Connecting...";
+  String? peerUid;
+
   final List<String> quickEmojis = ['😂', '❤️', '🔥', '👍', '🥺', '🎉'];
 
   @override
   void initState() {
     super.initState();
     _fetchMessages();
-    _timer = Timer.periodic(const Duration(seconds: 2), (timer) => _fetchMessages());
+    _getPeerStatus(); // Pehli baar status check
+    _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      _fetchMessages();
+      if(peerUid != null) _getPeerStatusFromUid(); // Har 2 sec me status update
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _getPeerStatus() async {
+    final res = await http.get(Uri.parse('${HiiApp.dbUrl}/usernames/${widget.peerUsername}.json?auth=${widget.token}'));
+    if (res.statusCode == 200 && res.body != 'null') {
+      peerUid = jsonDecode(res.body);
+      _getPeerStatusFromUid();
+    }
+  }
+
+  Future<void> _getPeerStatusFromUid() async {
+    if (peerUid == null) return;
+    final res = await http.get(Uri.parse('${HiiApp.dbUrl}/users/$peerUid/status.json?auth=${widget.token}'));
+    if (res.statusCode == 200 && res.body != 'null') {
+      final status = jsonDecode(res.body);
+      setState(() {
+        isPeerOnline = status['isOnline'] ?? false;
+        if (!isPeerOnline) {
+          int timestamp = status['lastSeen'] ?? 0;
+          if (timestamp == 0) {
+            lastSeenText = "Offline";
+          } else {
+            DateTime dt = DateTime.fromMillisecondsSinceEpoch(timestamp);
+            lastSeenText = "Last seen at ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}";
+          }
+        }
+      });
+    } else {
+      setState(() => lastSeenText = "Offline");
+    }
   }
 
   Future<void> _fetchMessages() async {
@@ -78,31 +117,38 @@ class _ChatScreenState extends State<ChatScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         title: Row(
           children: [
-            CircleAvatar(radius: 18, backgroundColor: const Color(0xFF38BDF8), child: Text(widget.peerUsername[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 16))),
+            CircleAvatar(radius: 20, backgroundColor: const Color(0xFF38BDF8), child: Text(widget.peerUsername[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold))),
             const SizedBox(width: 12),
-            Text('@${widget.peerUsername}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 20)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('@${widget.peerUsername}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
+                // LAST SEEN STATUS YAHAN DIKHEGA
+                Text(
+                  isPeerOnline ? 'Online' : lastSeenText, 
+                  style: TextStyle(
+                    fontSize: 12, 
+                    fontWeight: isPeerOnline ? FontWeight.bold : FontWeight.normal,
+                    color: isPeerOnline ? const Color(0xFF4ADE80) : Colors.white54 // Online hone par Green color
+                  )
+                ),
+              ],
+            ),
           ],
         ),
         actions: [
-          // === YEH RAHA TERA 3-DOTS MENU ===
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
             color: const Color(0xFF1E293B),
             onSelected: (value) {
               if (value == 'delete') {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Delete Chat feature agle update mein aayega!')));
-              } else if (value == 'block') {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Block feature agle update mein aayega!')));
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
               const PopupMenuItem<String>(
                 value: 'delete',
                 child: ListTile(leading: Icon(Icons.delete, color: Colors.redAccent), title: Text('Clear Chat', style: TextStyle(color: Colors.redAccent)), contentPadding: EdgeInsets.zero),
-              ),
-              const PopupMenuItem<String>(
-                value: 'block',
-                child: ListTile(leading: Icon(Icons.block, color: Colors.white70), title: Text('Block User', style: TextStyle(color: Colors.white)), contentPadding: EdgeInsets.zero),
               ),
             ],
           ),
