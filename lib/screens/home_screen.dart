@@ -15,16 +15,42 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+// WidgetsBindingObserver se hum track karenge ki app open hai ya background mein
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Map<String, String>> chats = [];
   bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _updateOnlineStatus(true); // App khulte hi online
     _loadChats();
     _checkForUpdates();
     _setupNotifications();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _updateOnlineStatus(true);
+    } else {
+      _updateOnlineStatus(false);
+    }
+  }
+
+  Future<void> _updateOnlineStatus(bool isOnline) async {
+    final ref = Uri.parse('${HiiApp.dbUrl}/users/${widget.uid}/status.json?auth=${widget.token}');
+    await http.put(ref, body: jsonEncode({
+      'isOnline': isOnline,
+      'lastSeen': DateTime.now().millisecondsSinceEpoch
+    }));
   }
 
   Future<void> _setupNotifications() async {
@@ -118,6 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _logout() async {
+    _updateOnlineStatus(false);
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AuthCheck()));
@@ -126,7 +153,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // === YEH RAHA TERA 3-LINE MENU (DRAWER) ===
       drawer: Drawer(
         backgroundColor: const Color(0xFF0F172A),
         child: ListView(
@@ -136,22 +162,23 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: const BoxDecoration(color: Color(0xFF1E293B)),
               accountName: Text('@${widget.username}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               accountEmail: const Text('Premium User', style: TextStyle(color: Color(0xFF38BDF8))),
-              currentAccountPicture: CircleAvatar(backgroundColor: const Color(0xFF38BDF8), child: Text(widget.username[0].toUpperCase(), style: const TextStyle(fontSize: 24, color: Colors.white))),
+              currentAccountPicture: Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  CircleAvatar(radius: 40, backgroundColor: const Color(0xFF38BDF8), child: Text(widget.username[0].toUpperCase(), style: const TextStyle(fontSize: 30, color: Colors.white))),
+                  Container(
+                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    child: const Icon(Icons.add_circle, color: Color(0xFF38BDF8), size: 24),
+                  )
+                ],
+              ),
             ),
             ListTile(
               leading: const Icon(Icons.color_lens, color: Colors.white70),
               title: const Text('Theme Options', style: TextStyle(color: Colors.white)),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Themes update aane wala hai!')));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person, color: Colors.white70),
-              title: const Text('Profile Settings', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile update aane wala hai!')));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Themes update jaldi aayega!')));
               },
             ),
             const Divider(color: Colors.white24),
@@ -168,18 +195,12 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         title: const Text('hii', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -1)),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 15),
-            child: Center(child: Text('@${widget.username}', style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold))),
-          )
-        ],
       ),
       extendBodyBehindAppBar: true,
       body: BackgroundGradient(
         child: Column(
           children: [
-            const SizedBox(height: 80), // AppBar space
+            const SizedBox(height: 80),
             Expanded(
               child: isLoading 
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)))
