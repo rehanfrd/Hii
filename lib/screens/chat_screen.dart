@@ -28,10 +28,10 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _fetchMessages();
-    _getPeerStatus(); // Pehli baar status check
+    _getPeerStatus(); 
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       _fetchMessages();
-      if(peerUid != null) _getPeerStatusFromUid(); // Har 2 sec me status update
+      if(peerUid != null) _getPeerStatusFromUid(); 
     });
   }
 
@@ -89,6 +89,8 @@ class _ChatScreenState extends State<ChatScreen> {
       });
       temp.sort((a, b) => b['time'].compareTo(a['time']));
       if (mounted) setState(() => messages = temp);
+    } else {
+      if (mounted) setState(() => messages = []); // Agar chat delete ho jaye to screen khali ho jaye
     }
   }
 
@@ -108,6 +110,53 @@ class _ChatScreenState extends State<ChatScreen> {
     await http.put(Uri.parse('${HiiApp.dbUrl}/chats/${widget.chatId}/$pushId.json?auth=${widget.token}'), body: jsonEncode(msg));
   }
 
+  // === NEW: CLEAR FULL CHAT ===
+  Future<void> _clearChat() async {
+    await http.delete(Uri.parse('${HiiApp.dbUrl}/chats/${widget.chatId}.json?auth=${widget.token}'));
+    setState(() => messages.clear());
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Chat Cleared!')));
+  }
+
+  // === NEW: DELETE SINGLE MESSAGE ===
+  Future<void> _deleteMessage(String msgId) async {
+    await http.delete(Uri.parse('${HiiApp.dbUrl}/chats/${widget.chatId}/$msgId.json?auth=${widget.token}'));
+    _fetchMessages();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message Deleted')));
+  }
+
+  // === NEW: BOTTOM SHEET FOR LONG PRESS (REPLY / DELETE) ===
+  void _showMessageOptions(Map<String, dynamic> msg) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.reply_rounded, color: Color(0xFF38BDF8)),
+              title: const Text('Reply', style: TextStyle(color: Colors.white, fontSize: 16)),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() => replyToMessage = msg);
+              },
+            ),
+            // Sirf apne bheje hue message par hi delete ka option aayega
+            if (msg['sender'] == widget.username)
+              ListTile(
+                leading: const Icon(Icons.delete_rounded, color: Colors.redAccent),
+                title: const Text('Delete Message', style: TextStyle(color: Colors.redAccent, fontSize: 16)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteMessage(msg['id']);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -123,13 +172,12 @@ class _ChatScreenState extends State<ChatScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('@${widget.peerUsername}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
-                // LAST SEEN STATUS YAHAN DIKHEGA
                 Text(
                   isPeerOnline ? 'Online' : lastSeenText, 
                   style: TextStyle(
                     fontSize: 12, 
                     fontWeight: isPeerOnline ? FontWeight.bold : FontWeight.normal,
-                    color: isPeerOnline ? const Color(0xFF4ADE80) : Colors.white54 // Online hone par Green color
+                    color: isPeerOnline ? const Color(0xFF4ADE80) : Colors.white54
                   )
                 ),
               ],
@@ -142,7 +190,25 @@ class _ChatScreenState extends State<ChatScreen> {
             color: const Color(0xFF1E293B),
             onSelected: (value) {
               if (value == 'delete') {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Delete Chat feature agle update mein aayega!')));
+                showDialog(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    backgroundColor: const Color(0xFF0F172A),
+                    title: const Text('Clear Chat?', style: TextStyle(color: Colors.white)),
+                    content: const Text('Are you sure you want to delete all messages?', style: TextStyle(color: Colors.white70)),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                        onPressed: () {
+                          Navigator.pop(c);
+                          _clearChat();
+                        },
+                        child: const Text('Clear', style: TextStyle(color: Colors.white)),
+                      )
+                    ],
+                  )
+                );
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
@@ -167,7 +233,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   return Align(
                     alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                     child: GestureDetector(
-                      onLongPress: () => setState(() => replyToMessage = messages[index]),
+                      // Yahan long press par naya menu khulega
+                      onLongPress: () => _showMessageOptions(messages[index]),
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(14),
